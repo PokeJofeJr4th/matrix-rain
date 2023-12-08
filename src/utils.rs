@@ -17,6 +17,7 @@ use rand::{rngs::ThreadRng, thread_rng, Rng};
 pub struct AlternateBuffer {
     points: Vec<(u16, u16)>,
     stdout: Stdout,
+    bits: (u128, u128),
     rng: ThreadRng,
     term_size: (u16, u16),
 }
@@ -86,10 +87,12 @@ impl ExecutableCommand for AlternateBuffer {
 
 impl AlternateBuffer {
     pub fn new() -> Result<Self, Box<dyn Error>> {
+        let rng = thread_rng();
         let mut handler = Self {
             points: Vec::new(),
             stdout: stdout(),
-            rng: thread_rng(),
+            bits: (thread_rng().gen(), 1),
+            rng,
             term_size: terminal::size()?,
         };
         handler.execute(EnterAlternateScreen)?;
@@ -123,7 +126,7 @@ impl AlternateBuffer {
                     .execute(MoveTo(*x, real_y))?
                     .execute(PrintStyledContent(
                         {
-                            if self.rng.gen_bool(0.5) {
+                            if next_bool(&mut self.bits) {
                                 '1'
                             } else {
                                 '0'
@@ -144,6 +147,15 @@ impl AlternateBuffer {
 impl Drop for AlternateBuffer {
     fn drop(&mut self) {
         disable_raw_mode().unwrap();
+        self.stdout.execute(MoveTo(0, 0)).unwrap();
         self.stdout.execute(LeaveAlternateScreen).unwrap();
     }
+}
+
+fn next_bool(bits: &mut (u128, u128)) -> bool {
+    bits.1 <<= 1;
+    if bits.1 == 0 {
+        bits.1 = 1;
+    }
+    bits.0 & bits.1 == 0
 }
